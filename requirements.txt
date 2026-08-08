@@ -1,0 +1,32 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Visadin AI – Python Dependencies
+# Install with:  pip install -r requirements.txt
+#
+# For GPU (CUDA) support:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#   pip install ultralytics onnxruntime-gpu
+#
+# For OpenVINO support (Intel):
+#   pip install openvino
+#   yolo export model=yolov8n.pt format=openvino
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Core vision & AI
+opencv-python>=4.8.0
+ultralytics>=8.0.0          # YOLOv8
+numpy>=1.24.0
+
+# Web server / API
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+starlette>=0.36.0
+pydantic>=2.0.0
+
+# Async HTTP (webhook dispatch)
+aiohttp>=3.9.0
+
+# Config / env
+python-dotenv>=1.0.0
+
+# Optional – ONNX Runtime (CPU inference without torch)
+# onnxruntime>=1.17.0

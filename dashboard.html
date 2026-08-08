@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VISADIN AI – CCTV Command Centre</title>
+  <meta name="description" content="Visadin AI real-time CCTV monitoring with threat detection and emergency police alert system." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════
+       DESIGN TOKENS – CCTV / NVR aesthetic
+    ═══════════════════════════════════════════════════════════ */
+    :root {
+      --bg:         #040407;
+      --bg2:        #08080e;
+      --panel:      #0b0b14;
+      --panel2:     #0f0f1c;
+      --border:     #1a1a30;
+      --border2:    #252545;
+      --green:      #00ff88;
+      --green-dim:  #00994d;
+      --red:        #ff2244;
+      --red-dim:    #880011;
+      --amber:      #ffb020;
+      --amber-dim:  #7a5000;
+      --blue:       #2060ff;
+      --blue-dim:   #102060;
+      --cyan:       #00d4ff;
+      --white:      #e8eaf0;
+      --muted:      #5a5a80;
+      --faint:      #2a2a40;
+      --font-mono:  'Share Tech Mono', monospace;
+      --font-hud:   'Orbitron', sans-serif;
+      --font-ui:    'Inter', sans-serif;
+    }
+
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 14px; }
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg);
+      color: var(--white);
+      min-height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+    input, select, textarea { font-family: inherit; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* ── Top Bar ── */
+    #topbar {
+      height: 44px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border2);
+      display: flex; align-items: center; gap: 0;
+      position: relative; z-index: 100;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.8);
+    }
+    .tb-logo {
+      padding: 0 18px;
+      border-right: 1px solid var(--border2);
+      display: flex; align-items: center; gap: 10px; height: 100%;
+    }
+    .tb-logo .logo-text {
+      font-family: var(--font-hud);
+      font-size: 0.9rem; font-weight: 900; letter-spacing: 0.12em;
+      color: var(--green);
+      text-shadow: 0 0 12px rgba(0,255,136,0.6);
+    }
+    .tb-logo .logo-sub {
+      font-family: var(--font-mono);
+      font-size: 0.6rem; color: var(--muted); letter-spacing: 0.1em;
+    }
+    .tb-status {
+      padding: 0 16px;
+      border-right: 1px solid var(--border2);
+      display: flex; align-items: center; gap: 8px; height: 100%;
+      font-family: var(--font-mono); font-size: 0.72rem;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: blink 2s ease infinite;
+    }
+    .dot.red   { background: var(--red);   box-shadow: 0 0 8px var(--red); }
+    .dot.amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+    .tb-clock {
+      padding: 0 16px; height: 100%;
+      display: flex; align-items: center;
+      font-family: var(--font-hud); font-size: 0.78rem;
+      color: var(--cyan); letter-spacing: 0.08em;
+    }
+    .tb-right {
+      margin-left: auto;
+      display: flex; align-items: center; height: 100%;
+    }
+    .tb-btn {
+      height: 100%; padding: 0 16px;
+      border-left: 1px solid var(--border2);
+      font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em;
+      color: var(--muted); background: none;
+      transition: all 0.2s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .tb-btn:hover { color: var(--white); background: var(--panel2); }
+    .tb-btn.rec { color: var(--red); animation: blink 1s infinite; }
+
+    /* ── App layout ── */
+    #app {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      grid-template-rows: 1fr;
+      height: calc(100vh - 44px);
+    }
+
+    /* ══════════════════════════════════════════════════════════
+       LEFT: CCTV GRID
+    ══════════════════════════════════════════════════════════ */
+    #cctv-area {
+      display: flex; flex-direction: column;
+      overflow: hidden; background: #000;
+    }
+
+    /* Grid toolbar */
+    #grid-toolbar {
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 0; height: 32px; flex-shrink: 0;
+    }
+    .gt-btn {
+      height: 100%; padding: 0 14px;
+      border-right: 1px solid var(--border);
+      font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.05em;
+      color: var(--muted); background: none;
+      display: flex; align-items: center; gap: 5px;
+      transition: all 0.15s;
+    }
+    .gt-btn:hover, .gt-btn.active { color: var(--green); background: rgba(0,255,136,0.05); }
+    #grid-label {
+      margin-left: auto; padding: 0 14px;
+      font-family: var(--font-mono); font-size: 0.62rem; color: var(--faint);
+    }
+
+    /* Camera grid */
+    #cam-grid {
+      flex: 1; display: grid; overflow: hidden;
+      grid-template-columns: repeat(2, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 2px; background: #000;
+    }
+    #cam-grid.layout-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+    #cam-grid.layout-4 { grid-template-columns: repeat(2,1fr); grid-template-rows: repeat(2,1fr); }
+    #cam-grid.layout-6 { grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(2,1fr); }
+    #cam-grid.layout-9 { grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr); }
+
+    .cam-cell {
+      position: relative; background: #000;
+      border: 1px solid #111;
+      overflow: hidden; cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .cam-cell:hover { border-color: var(--green); }
+    .cam-cell.selected { border-color: var(--cyan) !important; border-width: 2px; }
+    .cam-cell.threat-active { border-color: var(--red) !important; border-width: 2px; }
+    .cam-cell.fullscreen { border: none; }
+
+    .cam-feed {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block;
+    }
+    .cam-no-signal {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 8px; color: #333;
+      background: repeating-linear-gradient(
+        45deg, #050508, #050508 10px, #060609 10px, #060609 20px
+      );
+    }
+    .cam-no-signal .ns-icon { font-size: 2rem; opacity: 0.3; }
+    .cam-no-signal .ns-text { font-family: var(--font-mono); font-size: 0.65rem; opacity: 0.4; letter-spacing: 0.1em; }
+
+    /* Camera HUD overlays */
+    .cam-hud {
+      position: absolute; inset: 0; pointer-events: none;
+    }
+    /* Corner brackets */
+    .cam-hud::before, .cam-hud::after {
+      content: ''; position: absolute;
+      width: 16px; height: 16px;
+    }
+    .cam-hud::before { top: 5px; left: 5px; border-top: 2px solid var(--green); border-left: 2px solid var(--green); }
+    .cam-hud::after  { top: 5px; right: 5px; border-top: 2px solid var(--green); border-right: 2px solid var(--green); }
+
+    .cam-hud-inner::before, .cam-hud-inner::after {
+      content: ''; position: absolute;
+      width: 16px; height: 16px;
+    }
+    .cam-hud-inner::before { bottom: 5px; left: 5px; border-bottom: 2px solid var(--green); border-left: 2px solid var(--green); }
+    .cam-hud-inner::after  { bottom: 5px; right: 5px; border-bottom: 2px solid var(--green); border-right: 2px solid var(--green); }
+
+    .cam-label {
+      position: absolute; top: 8px; left: 22px;
+      font-family: var(--font-mono); font-size: 0.6rem;
+      color: var(--green); letter-spacing: 0.1em;
+      text-shadow: 0 0 6px rgba(0,255,136,0.8);
+    }
+    .cam-status-badge {
+      position: absolute; top: 8px; right: 22px;
+      font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.08em;
+      padding: 2px 6px;
+      background: rgba(0,0,0,0.7);
+    }
+    .cam-status-badge.idle   { color: var(--green-dim); border: 1px solid var(--green-dim); }
+    .cam-status-badge.active { color: var(--amber); border: 1px solid var(--amber); }
+    .cam-status-badge.threat { color: var(--red); border: 1px solid var(--red); animation: blink 0.5s infinite; }
+
+    .cam-timestamp {
+      position: absolute; bottom: 8px; left: 22px;
+      font-family: var(--font-mono); font-size: 0.58rem;
+      color: rgba(255,255,255,0.5); letter-spacing: 0.05em;
+    }
+    .cam-fps {
+      position: absolute; bottom: 8px; right: 22px;
+      font-family: var(--font-mono); font-size: 0.55rem;
+      color: var(--cyan);
+    }
+
+    /* Scanline effect */
+    .cam-cell::after {
+      content: '';
+      position: absolute; inset: 0; pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom, transparent 0px, transparent 3px,
+        rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px
+      );
+    }
+
+    /* Threat flash overlay */
+    .threat-overlay {
+      position: absolute; inset: 0; pointer-events: none;
+      background: rgba(255,34,68,0.12);
+      display: none;
+      animation: threat-strobe 0.6s ease infinite;
+    }
+    .cam-cell.threat-active .threat-overlay { display: block; }
+    @keyframes threat-strobe { 0%,100%{opacity:0;} 50%{opacity:1;} }
+
+    /* ══════════════════════════════════════════════════════════
+       RIGHT SIDEBAR
+    ══════════════════════════════════════════════════════════ */
+    #sidebar {
+      background: var(--panel);
+      border-left: 1px solid var(--border2);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── ALARM PANEL ── */
+    #alarm-panel {
+      flex-shrink: 0;
+      padding: 14px;
+      border-bottom: 1px solid var(--border2);
+      background: var(--panel2);
+    }
+    #alarm-panel h2 {
+      font-family: var(--font-hud); font-size: 0.6rem;
+      letter-spacing: 0.15em; color: var(--muted);
+      margin-bottom: 10px; text-transform: uppercase;
+    }
+
+    /* Big red alarm button */
+    #alarm-btn {
+      width: 100%; padding: 14px 10px;
+      background: radial-gradient(ellipse at center, #cc0022 0%, #880011 60%, #440008 100%);
+      border: 2px solid var(--red);
+      border-radius: 6px;
+      font-family: var(--font-hud); font-size: 0.85rem; font-weight: 900;
+      letter-spacing: 0.15em; text-transform: uppercase;
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.15s;
+      box-shadow: 0 0 20px rgba(255,34,68,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+      position: relative; overflow: hidden;
+    }
+    #alarm-btn::before {
+      content: '';
+      position: absolute; inset: -2px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,34,68,0.4) 50%, transparent 100%);
+      animation: alarm-sweep 2s linear infinite;
+    }
+    @keyframes alarm-sweep {
+      from { transform: translateX(-100%); }
+      to   { transform: translateX(100%); }
+    }
+    #alarm-btn:hover {
+      background: radial-gradient(ellipse at center, #ff1133 0%, #bb0022 60%, #660011 100%);
+      box-shadow: 0 0 40px rgba(255,34,68,0.6), inset 0 1px 0 rgba(255,255,255,0.2);
+      transform: translateY(-1px);
+    }
+    #alarm-btn:active { transform: translateY(1px); box-shadow: 0 0 10px rgba(255,34,68,0.4); }
+    #alarm-btn.triggered {
+      animation: alarm-pulse 0.5s ease infinite;
+    }
+    @keyframes alarm-pulse {
+      0%,100% { box-shadow: 0 0 20px rgba(255,34,68,0.3); }
+      50%      { box-shadow: 0 0 60px rgba(255,34,68,0.9), 0 0 100px rgba(255,34,68,0.3); }
+    }
+
+    /* Alarm note input */
+    #alarm-note {
+      width: 100%; margin-top: 8px;
+      background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: 4px; color: var(--white); padding: 6px 8px;
+      font-size: 0.72rem; resize: none;
+    }
+    #alarm-note:focus { border-color: var(--red); outline: none; }
+    #alarm-note::placeholder { color: var(--muted); }
+
+    .alarm-cam-row {
+      display: flex; gap: 6px; margin-top: 6px; align-items: center;
+    }
+    .alarm-cam-row label {
+      font-family: var(--font-mono); font-size: 0.62rem; color: var(--muted);
+      white-space: nowrap;
+    }
+    #alarm-cam-select {
+      flex: 1; background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: 4px; color: var(--white); padding: 4px 6px; font-size: 0.7rem;
+    }
+
+    /* Police notify btn */
+    #police-btn {
+      width: 100%; margin-top: 8px; padding: 8px;
+      background: var(--blue-dim); border: 1px solid var(--blue);
+      border-radius: 4px;
+      font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.06em;
+      color: var(--cyan);
+      transition: all 0.2s;
+    }
+    #police-btn:hover { background: var(--blue); color: #fff; box-shadow: 0 0 16px rgba(32,96,255,0.4); }
+
+    /* Alarm status line */
+    #alarm-status {
+      margin-top: 8px;
+      font-family: var(--font-mono); font-size: 0.62rem;
+      color: var(--muted); text-align: center; min-height: 14px;
+    }
+    #alarm-status.ok    { color: var(--green); }
+    #alarm-status.error { color: var(--red); }
+
+    /* ── CONTROLS ── */
+    #controls-section {
+      flex-shrink: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border2);
+    }
+    .ctrl-header {
+      font-family: var(--font-hud); font-size: 0.55rem;
+      letter-spacing: 0.15em; color: var(--muted);
+      margin-bottom: 10px; text-transform: uppercase;
+    }
+    .ctrl-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .ctrl-row label {
+      font-family: var(--font-mono); font-size: 0.64rem; color: var(--muted);
+      min-width: 80px;
+    }
+    .ctrl-row .val {
+      font-family: var(--font-hud); font-size: 0.62rem; color: var(--cyan);
+      min-width: 28px; text-align: right;
+    }
+    input[type=range] {
+      flex: 1; margin: 0 8px; -webkit-appearance: none;
+      height: 3px; background: var(--faint); border-radius: 2px; outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--green); cursor: pointer;
+      box-shadow: 0 0 8px rgba(0,255,136,0.6);
+    }
+    .ctrl-btns { display: flex; gap: 6px; margin-top: 8px; }
+    .ctrl-btn {
+      flex: 1; padding: 6px 4px;
+      background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: 3px; font-family: var(--font-mono);
+      font-size: 0.6rem; letter-spacing: 0.04em; color: var(--muted);
+      transition: all 0.15s;
+    }
+    .ctrl-btn:hover { border-color: var(--green); color: var(--green); }
+    .ctrl-btn.active { background: rgba(0,255,136,0.1); border-color: var(--green); color: var(--green); }
+    .cam-sel {
+      width: 100%; background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: 3px; color: var(--white); padding: 5px 6px;
+      font-size: 0.68rem; margin-bottom: 10px;
+    }
+
+    /* ── CAMERA MANAGER ── */
+    #cam-manager-section {
+      flex-shrink: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border2);
+    }
+    .cm-input-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .cm-input {
+      flex: 1; background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: 3px; color: var(--white); padding: 5px 8px;
+      font-family: var(--font-mono); font-size: 0.68rem;
+    }
+    .cm-input:focus { border-color: var(--cyan); outline: none; }
+    .cm-input::placeholder { color: var(--muted); }
+    .cm-btn {
+      padding: 5px 10px;
+      background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: 3px; font-family: var(--font-mono); font-size: 0.62rem;
+      color: var(--muted); transition: all 0.15s; white-space: nowrap;
+    }
+    .cm-btn:hover { border-color: var(--green); color: var(--green); }
+    .cm-btn.phone { border-color: var(--cyan); color: var(--cyan); }
+    .cm-btn.phone:hover { background: rgba(0,212,255,0.1); }
+    .cm-btn.scan  { border-color: var(--amber); color: var(--amber); }
+    .cm-btn.scan:hover { background: rgba(255,176,32,0.1); }
+    .cm-cam-list { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+    .cm-cam-item {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 3px; padding: 5px 8px;
+    }
+    .cm-cam-item .cm-cam-id {
+      font-family: var(--font-mono); font-size: 0.65rem; color: var(--green);
+      flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .cm-cam-item .cm-cam-src {
+      font-family: var(--font-mono); font-size: 0.58rem; color: var(--muted);
+    }
+    .cm-remove-btn {
+      padding: 2px 7px; background: none;
+      border: 1px solid var(--red-dim); border-radius: 2px;
+      font-family: var(--font-mono); font-size: 0.58rem; color: var(--red);
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    .cm-remove-btn:hover { background: var(--red-dim); }
+    #cm-status {
+      font-family: var(--font-mono); font-size: 0.6rem;
+      color: var(--muted); margin-top: 5px; text-align: center;
+    }
+    #cm-status.ok    { color: var(--green); }
+    #cm-status.error { color: var(--red); }
+    #device-options {
+      width: 100%; background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: 3px; color: var(--white); padding: 5px 6px;
+      font-family: var(--font-mono); font-size: 0.68rem; margin-bottom: 8px;
+      display: none;
+    }
+
+    /* ── ALERT LOG ── */
+    #alert-log-section {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+    #alert-log-header {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #alert-log-header span {
+      font-family: var(--font-hud); font-size: 0.55rem;
+      letter-spacing: 0.15em; color: var(--muted); text-transform: uppercase;
+    }
+    #alert-count {
+      background: var(--red); color: #fff;
+      font-family: var(--font-mono); font-size: 0.6rem;
+      padding: 1px 6px; border-radius: 10px; min-width: 22px; text-align: center;
+    }
+    #alert-log {
+      flex: 1; overflow-y: auto; padding: 8px;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .alert-entry {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 3px; padding: 7px 8px;
+      display: flex; gap: 8px; align-items: center;
+      cursor: pointer; transition: border-color 0.15s;
+      border-left: 3px solid var(--red);
+    }
+    .alert-entry:hover { border-color: var(--red); }
+    .alert-thumb {
+      width: 48px; height: 36px;
+      object-fit: cover; border-radius: 2px; flex-shrink: 0;
+      background: var(--faint);
+    }
+    .alert-info { flex: 1; min-width: 0; }
+    .alert-class {
+      font-family: var(--font-hud); font-size: 0.62rem;
+      color: var(--red); letter-spacing: 0.05em;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .alert-time { font-family: var(--font-mono); font-size: 0.58rem; color: var(--muted); margin-top: 2px; }
+    .alert-empty { font-family: var(--font-mono); font-size: 0.65rem; color: var(--faint); text-align: center; padding: 20px 0; }
+
+    /* ══════════════════════════════════════════════════════════
+       FULL-SCREEN ALARM OVERLAY
+    ══════════════════════════════════════════════════════════ */
+    #global-alarm-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      display: none; align-items: center; justify-content: center;
+      flex-direction: column;
+      background: rgba(255,0,0,0.04);
+      pointer-events: none;
+    }
+    #global-alarm-overlay.active { display: flex; }
+    .alarm-border-anim {
+      position: absolute; inset: 0;
+      border: 6px solid var(--red);
+      animation: alarm-border 0.5s ease infinite;
+      pointer-events: none;
+    }
+    @keyframes alarm-border {
+      0%,100% { opacity: 0.2; }
+      50%      { opacity: 1; box-shadow: inset 0 0 60px rgba(255,34,68,0.3); }
+    }
+    .alarm-banner {
+      background: rgba(0,0,0,0.9);
+      border: 2px solid var(--red);
+      padding: 20px 40px;
+      text-align: center;
+      box-shadow: 0 0 60px rgba(255,34,68,0.5);
+      pointer-events: all;
+    }
+    .alarm-banner h1 {
+      font-family: var(--font-hud); font-size: 1.6rem; font-weight: 900;
+      color: var(--red); letter-spacing: 0.2em;
+      animation: alarm-pulse 0.5s ease infinite;
+    }
+    .alarm-banner p { font-family: var(--font-mono); font-size: 0.75rem; color: var(--amber); margin-top: 8px; }
+    #dismiss-alarm {
+      margin-top: 14px; padding: 8px 24px;
+      background: var(--red-dim); border: 1px solid var(--red);
+      color: #fff; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em;
+      cursor: pointer; transition: all 0.2s;
+    }
+    #dismiss-alarm:hover { background: var(--red); }
+
+    /* ══════════════════════════════════════════════════════════
+       TOAST
+    ══════════════════════════════════════════════════════════ */
+    #toast-wrap {
+      position: fixed; bottom: 14px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      z-index: 10000; pointer-events: none;
+    }
+    .toast {
+      padding: 8px 20px;
+      background: var(--panel2); border: 1px solid var(--border2);
+      font-family: var(--font-mono); font-size: 0.7rem;
+      color: var(--white); letter-spacing: 0.04em;
+      animation: fadeUpIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+      pointer-events: none;
+    }
+    .toast.ok     { border-color: var(--green); color: var(--green); }
+    .toast.danger { border-color: var(--red);   color: var(--red); }
+    .toast.info   { border-color: var(--cyan);  color: var(--cyan); }
+    @keyframes fadeUpIn { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+    @keyframes fadeOut  { to{opacity:0;} }
+
+    /* ══════════════════════════════════════════════════════════
+       FULLSCREEN SINGLE CAM
+    ══════════════════════════════════════════════════════════ */
+    #fullscreen-cam {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: #000; flex-direction: column;
+    }
+    #fullscreen-cam.active { display: flex; }
+    #fs-feed { width: 100%; flex: 1; object-fit: contain; }
+    #fs-toolbar {
+      height: 36px; background: var(--panel);
+      border-top: 1px solid var(--border2);
+      display: flex; align-items: center; padding: 0 14px; gap: 14px;
+    }
+    #fs-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--green); }
+    #fs-close {
+      margin-left: auto; padding: 4px 14px;
+      background: var(--panel2); border: 1px solid var(--border2);
+      font-family: var(--font-mono); font-size: 0.65rem; color: var(--muted);
+      transition: all 0.2s;
+    }
+    #fs-close:hover { border-color: var(--red); color: var(--red); }
+
+    /* Motion indicator bar (bottom of each cell) */
+    .motion-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+      background: var(--green); transform: scaleX(0); transform-origin: left;
+      transition: transform 0.3s ease;
+    }
+    .cam-cell.threat-active .motion-bar { background: var(--red); transform: scaleX(1); }
+    .cam-cell.motion .motion-bar { transform: scaleX(0.6); }
+  </style>
+</head>
+
+<body>
+
+<!-- ════════════ TOP BAR ════════════ -->
+<div id="topbar">
+  <div class="tb-logo">
+    <div>
+      <div class="logo-text">VISADIN AI</div>
+      <div class="logo-sub">EDGE SECURITY SYSTEM</div>
+    </div>
+  </div>
+  <div class="tb-status" id="sys-status">
+    <div class="dot" id="sys-dot"></div>
+    <span id="sys-text" style="font-size:0.65rem;color:var(--muted);">CONNECTING…</span>
+  </div>
+  <div class="tb-status" style="color:var(--muted);font-size:0.65rem;">
+    <div class="dot amber"></div>
+    <span id="cam-count">0 CAMERAS</span>
+  </div>
+  <div class="tb-clock" id="clock">00:00:00</div>
+  <div class="tb-right">
+    <button class="tb-btn rec" id="rec-indicator">● REC</button>
+    <button class="tb-btn" onclick="toggleFullCam()">⛶ EXPAND</button>
+    <button class="tb-btn" onclick="downloadAllSnapshots()">📸 SNAPSHOT</button>
+  </div>
+</div>
+
+<!-- ════════════ MAIN APP ════════════ -->
+<div id="app">
+
+  <!-- LEFT: CCTV VIDEO GRID -->
+  <div id="cctv-area">
+
+    <!-- Grid toolbar -->
+    <div id="grid-toolbar">
+      <button class="gt-btn active" onclick="setLayout(1,this)">[ 1 ]</button>
+      <button class="gt-btn" onclick="setLayout(4,this)">[ 4 ]</button>
+      <button class="gt-btn" onclick="setLayout(6,this)">[ 6 ]</button>
+      <button class="gt-btn" onclick="setLayout(9,this)">[ 9 ]</button>
+      <button class="gt-btn" onclick="refreshAll()">↺ REFRESH</button>
+      <span id="grid-label">LIVE FEED · H.264</span>
+    </div>
+
+    <!-- Camera cells -->
+    <div id="cam-grid" class="layout-4">
+      <!-- Populated by JS -->
+    </div>
+
+  </div>
+
+  <!-- RIGHT: SIDEBAR -->
+  <div id="sidebar">
+
+    <!-- ━━ ALARM PANEL ━━ -->
+    <div id="alarm-panel">
+      <h2>⚡ EMERGENCY CONTROLS</h2>
+
+      <button id="alarm-btn" onclick="triggerAlarm()">
+        ⚠ TRIGGER ALARM
+      </button>
+
+      <textarea id="alarm-note" rows="2" placeholder="Incident note (optional)…"></textarea>
+
+      <div class="alarm-cam-row">
+        <label>CAMERA:</label>
+        <select id="alarm-cam-select" class="cam-sel" style="margin-bottom:0;flex:1;"></select>
+      </div>
+
+      <button id="police-btn" onclick="notifyPolice()">
+        🚔 NOTIFY POLICE / SEND SMS
+      </button>
+
+      <div id="alarm-status">SYSTEM READY</div>
+    </div>
+
+    <!-- ━━ LIVE CONTROLS ━━ -->
+    <div id="controls-section">
+      <div class="ctrl-header">CAMERA CONTROLS</div>
+
+      <select class="cam-sel" id="ctrl-cam">
+        <option value="all">ALL CAMERAS</option>
+      </select>
+
+      <div class="ctrl-row">
+        <label>IDLE FPS</label>
+        <input type="range" id="idle-fps" min="1" max="15" value="5"
+          oninput="document.getElementById('idle-fps-val').textContent=this.value" />
+        <span class="val" id="idle-fps-val">5</span>
+      </div>
+      <div class="ctrl-row">
+        <label>ACTIVE FPS</label>
+        <input type="range" id="active-fps" min="5" max="60" value="30"
+          oninput="document.getElementById('active-fps-val').textContent=this.value" />
+        <span class="val" id="active-fps-val">30</span>
+      </div>
+      <div class="ctrl-row">
+        <label>QUALITY</label>
+        <input type="range" id="quality" min="20" max="100" value="80"
+          oninput="document.getElementById('quality-val').textContent=this.value+'%'" />
+        <span class="val" id="quality-val">80%</span>
+      </div>
+
+      <div style="margin-bottom:8px;">
+        <div style="font-family:var(--font-mono);font-size:0.6rem;color:var(--muted);margin-bottom:4px;">STATE OVERRIDE</div>
+        <div class="ctrl-btns">
+          <button class="ctrl-btn active" id="btn-auto" onclick="setState('auto',this)">AUTO</button>
+          <button class="ctrl-btn" id="btn-idle" onclick="setState('idle',this)">IDLE</button>
+          <button class="ctrl-btn" id="btn-active" onclick="setState('active',this)">ACTIVE</button>
+        </div>
+      </div>
+
+      <div class="ctrl-btns">
+        <button class="ctrl-btn" onclick="applyControls()" style="color:var(--green);border-color:var(--green-dim);">▶ APPLY</button>
+        <button class="ctrl-btn" onclick="resetControls()">↺ RESET</button>
+      </div>
+    </div>
+
+    <!-- ━━ CAMERA MANAGER ━━ -->
+    <div id="cam-manager-section">
+      <div class="ctrl-header">📷 CAMERA MANAGER</div>
+
+      <!-- Quick: connect phone via DroidCam -->
+      <div class="cm-input-row">
+        <button class="cm-btn phone" style="width:100%;" onclick="connectPhone()"
+          title="Scans for DroidCam USB device and adds it automatically">
+          📱 CONNECT PHONE (DroidCam)
+        </button>
+      </div>
+
+      <!-- Scan USB devices -->
+      <div class="cm-input-row">
+        <button class="cm-btn scan" style="width:100%;" onclick="scanDevices()">
+          🔍 SCAN USB DEVICES
+        </button>
+      </div>
+
+      <!-- Scanned device picker (hidden until scan runs) -->
+      <select id="device-options" onchange="document.getElementById('cam-source-input').value=this.value">
+        <option value="">-- select scanned device --</option>
+      </select>
+
+      <!-- Manual source input + Add -->
+      <div class="cm-input-row">
+        <input class="cm-input" id="cam-source-input"
+          placeholder="0  or  rtsp://ip/stream" />
+        <input class="cm-input" id="cam-name-input"
+          placeholder="name" style="max-width:60px;" />
+        <button class="cm-btn" onclick="addCamera()" style="border-color:var(--green);color:var(--green);">+ ADD</button>
+      </div>
+
+      <!-- List of active cameras -->
+      <div class="cm-cam-list" id="cm-cam-list"></div>
+      <div id="cm-status"></div>
+    </div>
+
+    <!-- ━━ ALERT LOG ━━ -->
+    <div id="alert-log-section">
+      <div id="alert-log-header">
+        <span>THREAT LOG</span>
+        <span id="alert-count">0</span>
+      </div>
+      <div id="alert-log">
+        <div class="alert-empty">NO INCIDENTS RECORDED</div>
+      </div>
+    </div>
+
+  </div><!-- /sidebar -->
+
+</div><!-- /app -->
+
+<!-- Fullscreen single camera view -->
+<div id="fullscreen-cam">
+  <img id="fs-feed" alt="Fullscreen camera feed" />
+  <div id="fs-toolbar">
+    <span id="fs-label">CAMERA 0 – FULLSCREEN</span>
+    <button id="fs-close" onclick="closeFullCam()">✕ CLOSE</button>
+  </div>
+</div>
+
+<!-- Global alarm overlay (flashes on alarm) -->
+<div id="global-alarm-overlay">
+  <div class="alarm-border-anim"></div>
+  <div class="alarm-banner">
+    <h1>⚠ ALARM ACTIVE ⚠</h1>
+    <p id="alarm-banner-text">Manual alarm triggered. Authorities being notified.</p>
+    <button id="dismiss-alarm" onclick="dismissAlarm()">DISMISS ALARM</button>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-wrap"></div>
+
+
+<!-- ══════════════════════════════════════════════════════
+     ALARM AUDIO (Web Audio API – no file needed)
+══════════════════════════════════════════════════════ -->
+<script>
+/* ─── Audio context ─── */
+let audioCtx = null;
+let alarmNodes = [];
+let alarmActive = false;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function startAlarmSound() {
+  if (alarmActive) return;
+  alarmActive = true;
+  const ctx = getAudioCtx();
+
+  function beep() {
+    if (!alarmActive) return;
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc1.frequency.value = 880;
+    osc2.frequency.value = 660;
+    osc1.type = 'square'; osc2.type = 'square';
+    gain.gain.value = 0.15;
+    osc1.connect(gain); osc2.connect(gain);
+    gain.connect(ctx.destination);
+    osc1.start(); osc2.start();
+    osc1.stop(ctx.currentTime + 0.25);
+    osc2.stop(ctx.currentTime + 0.25);
+    setTimeout(beep, 600);
+  }
+  beep();
+}
+
+function stopAlarmSound() {
+  alarmActive = false;
+}
+
+/* ─── Config ─── */
+const BASE = '';
+const POLL_MS = 2500;
+const POLL_ALERTS_MS = 3500;
+
+let cameraIds = [];
+let selectedState = 'auto';
+let currentLayout = 1;
+let fsCamera = null;
+let alarmTriggered = false;
+let cameraSourceMap = {};  // camId → source string (from stats)
+
+/* ─── Clock ─── */
+function updateClock() {
+  const n = new Date();
+  const p = v => String(v).padStart(2,'0');
+  document.getElementById('clock').textContent =
+    `${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())} · ${n.toLocaleDateString('en-IN')}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ─── Toast ─── */
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-wrap').appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+/* ─── Build a camera cell ─── */
+function makeCameraCell(camId, stats = {}) {
+  const state = stats.state || 'idle';
+  const fps   = stats.current_fps || 0;
+  const w     = stats.frame_width || 0;
+  const h     = stats.frame_height || 0;
+  const isThreat = state === 'threat';
+  const isActive = state === 'active' || isThreat;
+
+  return `
+  <div class="cam-cell ${isThreat ? 'threat-active' : ''}"
+       id="cell-${camId}"
+       ondblclick="openFullCam('${camId}')">
+
+    <img class="cam-feed" id="feed-${camId}"
+         src="${BASE}/stream/${camId}"
+         alt="${camId}"
+         onerror="this.style.display='none';document.getElementById('ns-${camId}').style.display='flex';" />
+
+    <div class="cam-no-signal" id="ns-${camId}" style="display:none;">
+      <div class="ns-icon">📷</div>
+      <div class="ns-text">NO SIGNAL · ${camId.toUpperCase()}</div>
+    </div>
+
+    <div class="cam-hud" id="hud-${camId}">
+      <div class="cam-hud-inner" style="position:absolute;inset:0;pointer-events:none;"></div>
+    </div>
+    <div class="threat-overlay"></div>
+
+    <div class="cam-label">${camId.toUpperCase()} ${w > 0 ? `· ${w}×${h}` : ''}</div>
+    <div class="cam-status-badge ${isActive ? 'active' : 'idle'}" id="badge-${camId}">
+      ${state.toUpperCase()}
+    </div>
+    <div class="cam-timestamp" id="ts-${camId}"></div>
+    <div class="cam-fps" id="fps-${camId}">${fps} FPS</div>
+    <div class="motion-bar"></div>
+  </div>`;
+}
+
+/* ─── Populate initial grid cells ─── */
+function buildGrid(cameras) {
+  const grid = document.getElementById('cam-grid');
+  // Fill grid with real + placeholder cells
+  const totalSlots = currentLayout <= 4 ? Math.max(currentLayout, cameras.length) : currentLayout;
+  let html = '';
+  for (let i = 0; i < totalSlots; i++) {
+    const cam = cameras[i];
+    if (cam) {
+      html += makeCameraCell(cam.camera_id, cam.stats || {});
+    } else {
+      html += `
+        <div class="cam-cell" id="cell-placeholder-${i}">
+          <div class="cam-no-signal">
+            <div class="ns-icon">📷</div>
+            <div class="ns-text">CHANNEL ${i+1} – EMPTY</div>
+          </div>
+          <div class="cam-label" style="color:var(--faint);">CH${String(i+1).padStart(2,'0')}</div>
+        </div>`;
+    }
+  }
+  grid.innerHTML = html;
+  // Update cam timestamps
+  cameras.forEach(c => tickTimestamp(c.camera_id));
+}
+
+/* ─── Timestamps ─── */
+function tickTimestamp(camId) {
+  const el = document.getElementById(`ts-${camId}`);
+  if (!el) return;
+  const n = new Date();
+  const p = v => String(v).padStart(2,'0');
+  el.textContent = `${p(n.getHours())}:${p(n.getMinutes())}:${p(n.getSeconds())} ${n.toLocaleDateString('en-IN')}`;
+}
+setInterval(() => cameraIds.forEach(tickTimestamp), 1000);
+
+/* ─── Update existing cells (no full rebuild to preserve MJPEG streams) ─── */
+function updateCellState(camId, stats) {
+  const state   = stats.state || 'idle';
+  const fps     = stats.current_fps || 0;
+  const isActive = state === 'active';
+  const isThreat = state === 'threat';
+
+  const cell  = document.getElementById(`cell-${camId}`);
+  const badge = document.getElementById(`badge-${camId}`);
+  const fpsEl = document.getElementById(`fps-${camId}`);
+
+  if (!cell) return;
+
+  cell.className = `cam-cell ${isThreat ? 'threat-active' : ''} ${isActive ? 'motion' : ''}`;
+  if (badge) {
+    badge.textContent = state.toUpperCase();
+    badge.className = `cam-status-badge ${isActive || isThreat ? 'active' : 'idle'}`;
+  }
+  if (fpsEl) fpsEl.textContent = `${fps} FPS`;
+}
+
+/* ─── Fetch cameras ─── */
+let lastCamHash = '';
+async function fetchCameras() {
+  try {
+    const res = await fetch(`${BASE}/api/cameras`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const cameras = data.cameras || [];
+
+    const hash = JSON.stringify(cameras.map(c => c.camera_id));
+    const isNewSet = hash !== lastCamHash;
+    lastCamHash = hash;
+
+    cameraIds = cameras.map(c => c.camera_id);
+
+    // Update selects
+    ['ctrl-cam','alarm-cam-select'].forEach(selId => {
+      const sel = document.getElementById(selId);
+      if (!sel) return;
+      const existing = Array.from(sel.options).map(o => o.value).filter(v => v !== 'all');
+      cameraIds.forEach(id => {
+        if (!existing.includes(id)) {
+          const opt = document.createElement('option');
+          opt.value = id; opt.textContent = id.toUpperCase();
+          sel.appendChild(opt);
+        }
+      });
+    });
+
+    // System status
+    document.getElementById('sys-dot').className = 'dot';
+    document.getElementById('sys-text').textContent = 'SYSTEM ONLINE';
+    document.getElementById('cam-count').textContent = `${cameras.length} CAMERA${cameras.length !== 1 ? 'S' : ''} ONLINE`;
+
+    const anyActive = cameras.some(c => (c.stats?.state || 'idle') !== 'idle');
+    document.getElementById('rec-indicator').style.display = anyActive ? '' : 'none';
+
+    if (isNewSet) {
+      buildGrid(cameras);
+    } else {
+      cameras.forEach(c => updateCellState(c.camera_id, c.stats || {}));
+    }
+    updateCamManagerList(cameras);
+
+  } catch (e) {
+    document.getElementById('sys-dot').className = 'dot red';
+    document.getElementById('sys-text').textContent = 'SERVER OFFLINE';
+  }
+}
+
+/* ─── Fetch alerts ─── */
+async function fetchAlerts() {
+  try {
+    const res = await fetch(`${BASE}/api/alerts/recent?limit=40`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const alerts = data.alerts || [];
+
+    document.getElementById('alert-count').textContent = alerts.length;
+    const log = document.getElementById('alert-log');
+
+    if (alerts.length === 0) {
+      log.innerHTML = '<div class="alert-empty">NO INCIDENTS RECORDED</div>';
+      return;
+    }
+
+    log.innerHTML = alerts.map(a => `
+      <div class="alert-entry" onclick="window.open('${BASE}${a.url}','_blank')">
+        <img class="alert-thumb" src="${BASE}${a.url}" alt="${a.filename}"
+          onerror="this.style.background='var(--faint)'" />
+        <div class="alert-info">
+          <div class="alert-class">⚠ ${a.filename.split('_')[0].toUpperCase()}</div>
+          <div class="alert-time">${a.timestamp}</div>
+        </div>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+/* ─── Layout control ─── */
+function setLayout(n, btn) {
+  currentLayout = n;
+  const grid = document.getElementById('cam-grid');
+  grid.className = `layout-${n}`;
+  document.querySelectorAll('.gt-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Rebuild to fill correct slots
+  fetchCameras();
+}
+
+/* ─── State control ─── */
+function setState(s, btn) {
+  selectedState = s;
+  ['btn-auto','btn-idle','btn-active'].forEach(id =>
+    document.getElementById(id)?.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+/* ─── Apply controls ─── */
+async function applyControls() {
+  const fps = parseInt(document.getElementById('active-fps').value);
+  const camSel = document.getElementById('ctrl-cam').value;
+  const targets = camSel === 'all' ? cameraIds : [camSel];
+  const payload = { fps, state: selectedState === 'auto' ? null : selectedState };
+
+  try {
+    await Promise.all(targets.map(id =>
+      fetch(`${BASE}/api/cameras/${id}/control`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    ));
+    toast(`CONTROLS APPLIED → ${targets.join(', ')}`, 'ok');
+  } catch(e) { toast('CONTROL FAILED', 'danger'); }
+}
+
+async function resetControls() {
+  document.getElementById('idle-fps').value = 5;
+  document.getElementById('idle-fps-val').textContent = '5';
+  document.getElementById('active-fps').value = 30;
+  document.getElementById('active-fps-val').textContent = '30';
+  document.getElementById('quality').value = 80;
+  document.getElementById('quality-val').textContent = '80%';
+  selectedState = 'auto';
+  ['btn-auto','btn-idle','btn-active'].forEach(id =>
+    document.getElementById(id)?.classList.remove('active'));
+  document.getElementById('btn-auto')?.classList.add('active');
+
+  await Promise.all(cameraIds.map(id =>
+    fetch(`${BASE}/api/cameras/${id}/control`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fps: null, quality: null, state: null }),
+    })
+  )).catch(() => {});
+  toast('CONTROLS RESET TO AUTO', 'ok');
+}
+
+/* ─── ALARM ─── */
+async function triggerAlarm() {
+  const camId = document.getElementById('alarm-cam-select').value || 'cam0';
+  const note  = document.getElementById('alarm-note').value.trim();
+
+  const btn = document.getElementById('alarm-btn');
+  btn.disabled = true;
+  btn.textContent = '⚡ TRIGGERING…';
+  setAlarmStatus('SENDING ALARM…', '');
+
+  try {
+    const res = await fetch(`${BASE}/api/alarm/trigger`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ camera_id: camId, note, include_snapshot: true }),
+    });
+    const data = await res.json();
+
+    btn.classList.add('triggered');
+    btn.textContent = '⚠ ALARM ACTIVE';
+
+    // Show overlay
+    showAlarmOverlay(`Alarm triggered on ${camId.toUpperCase()}. ${note || 'Authorities being notified.'}`);
+
+    // Sound
+    startAlarmSound();
+
+    // Status line
+    const notif = data.notifications || {};
+    const parts = [];
+    if (notif.sms)     parts.push('SMS ✓');
+    if (notif.email)   parts.push('EMAIL ✓');
+    if (notif.webhook) parts.push('WEBHOOK ✓');
+    setAlarmStatus(parts.length ? parts.join(' · ') : 'ALARM SENT (no notifiers configured)', 'ok');
+    toast('ALARM TRIGGERED – AUTHORITIES ALERTED', 'danger');
+
+  } catch(e) {
+    setAlarmStatus('FAILED – CHECK SERVER', 'error');
+    toast('ALARM DISPATCH FAILED', 'danger');
+    btn.textContent = '⚠ TRIGGER ALARM';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => {
+      if (!alarmTriggered) {
+        btn.classList.remove('triggered');
+        btn.textContent = '⚠ TRIGGER ALARM';
+      }
+    }, 30000);
+  }
+}
+
+/* Same as trigger alarm but labelled as police notification */
+async function notifyPolice() {
+  const camId = document.getElementById('alarm-cam-select').value || 'cam0';
+  const note  = (document.getElementById('alarm-note').value.trim() || '')
+    + ' [POLICE NOTIFICATION]';
+
+  setAlarmStatus('NOTIFYING POLICE…', '');
+  document.getElementById('police-btn').textContent = '⏳ SENDING…';
+  document.getElementById('police-btn').disabled = true;
+
+  try {
+    const res = await fetch(`${BASE}/api/alarm/trigger`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ camera_id: camId, note, include_snapshot: true }),
+    });
+    const data = await res.json();
+    const notif = data.notifications || {};
+    const parts = [];
+    if (notif.sms)   parts.push('SMS SENT ✓');
+    if (notif.email) parts.push('EMAIL SENT ✓');
+    setAlarmStatus(parts.length ? parts.join(' · ') : 'SENT (configure Twilio in .env for SMS)', 'ok');
+    toast('🚔 POLICE NOTIFICATION DISPATCHED', 'ok');
+  } catch(e) {
+    setAlarmStatus('FAILED – SERVER ERROR', 'error');
+    toast('NOTIFICATION FAILED', 'danger');
+  } finally {
+    document.getElementById('police-btn').textContent = '🚔 NOTIFY POLICE / SEND SMS';
+    document.getElementById('police-btn').disabled = false;
+  }
+}
+
+function setAlarmStatus(msg, cls) {
+  const el = document.getElementById('alarm-status');
+  el.textContent = msg;
+  el.className = cls;
+}
+
+/* ─── Alarm overlay ─── */
+function showAlarmOverlay(msg) {
+  alarmTriggered = true;
+  document.getElementById('alarm-banner-text').textContent = msg;
+  document.getElementById('global-alarm-overlay').classList.add('active');
+  document.body.style.setProperty('--bg', '#0a0003');
+}
+
+function dismissAlarm() {
+  alarmTriggered = false;
+  document.getElementById('global-alarm-overlay').classList.remove('active');
+  document.body.style.removeProperty('--bg');
+  stopAlarmSound();
+  const btn = document.getElementById('alarm-btn');
+  btn.classList.remove('triggered');
+  btn.textContent = '⚠ TRIGGER ALARM';
+  setAlarmStatus('ALARM DISMISSED', '');
+  toast('ALARM DISMISSED', 'info');
+}
+
+/* ─── Fullscreen cam ─── */
+function openFullCam(camId) {
+  fsCamera = camId;
+  const feed = document.getElementById('fs-feed');
+  feed.src = `${BASE}/stream/${camId}`;
+  document.getElementById('fs-label').textContent = `${camId.toUpperCase()} – FULLSCREEN LIVE`;
+  document.getElementById('fullscreen-cam').classList.add('active');
+}
+
+function closeFullCam() {
+  document.getElementById('fullscreen-cam').classList.remove('active');
+  document.getElementById('fs-feed').src = '';
+  fsCamera = null;
+}
+
+function toggleFullCam() {
+  if (cameraIds.length > 0) openFullCam(cameraIds[0]);
+}
+
+/* ─── Snapshot ─── */
+async function downloadAllSnapshots() {
+  cameraIds.forEach(id => window.open(`${BASE}/snapshot/${id}`, '_blank'));
+}
+
+/* ─── Refresh ─── */
+function refreshAll() {
+  fetchCameras(); fetchAlerts();
+  toast('REFRESHED', 'info');
+}
+
+/* ─── Keyboard ─── */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeFullCam(); dismissAlarm(); }
+  if (e.key === 'F' || e.key === 'f') { if (cameraIds.length) openFullCam(cameraIds[0]); }
+});
+
+/* ─── Poll ─── */
+async function poll(fn, ms) {
+  while (true) { await fn(); await new Promise(r => setTimeout(r, ms)); }
+}
+
+/* ─── Camera Manager ─── */
+function setCmStatus(msg, cls='') {
+  const el = document.getElementById('cm-status');
+  el.textContent = msg; el.className = cls;
+}
+
+async function scanDevices() {
+  setCmStatus('SCANNING…', '');
+  const btn = document.querySelector('.cm-btn.scan');
+  btn.textContent = '⏳ SCANNING…'; btn.disabled = true;
+  try {
+    const res = await fetch(`${BASE}/api/devices/list`);
+    const data = await res.json();
+    const devices = data.devices || [];
+    const sel = document.getElementById('device-options');
+    sel.style.display = '';
+    // Rebuild options
+    sel.innerHTML = '<option value="">-- select detected device --</option>';
+    devices.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = String(d.index);
+      opt.textContent = `[${d.index}] ${d.label}`;
+      sel.appendChild(opt);
+    });
+    if (devices.length === 0) {
+      setCmStatus('NO USB CAMERAS FOUND. Is DroidCam running?', 'error');
+    } else {
+      setCmStatus(`FOUND ${devices.length} DEVICE(S) — SELECT ABOVE`, 'ok');
+      toast(`${devices.length} USB device(s) detected`, 'ok');
+    }
+  } catch(e) {
+    setCmStatus('SCAN FAILED – SERVER ERROR', 'error');
+  } finally {
+    btn.textContent = '🔍 SCAN USB DEVICES'; btn.disabled = false;
+  }
+}
+
+async function connectPhone() {
+  /* One-click: scan for devices, pick the first one not already in use, add it */
+  setCmStatus('SCANNING FOR PHONE…', '');
+  const btn = document.querySelector('.cm-btn.phone');
+  btn.disabled = true; btn.textContent = '⏳ CONNECTING…';
+  try {
+    const res = await fetch(`${BASE}/api/devices/list`);
+    const data = await res.json();
+    const devices = data.devices || [];
+    if (devices.length === 0) {
+      setCmStatus('NO CAMERA FOUND. Open DroidCam on phone + PC first!', 'error');
+      toast('No USB camera detected. Start DroidCam first.', 'danger');
+      return;
+    }
+    // Find first device index not already used
+    const usedSources = Object.values(cameraSourceMap).map(s =>
+      s.replace('USB:','').trim()
+    );
+    const available = devices.find(d => !usedSources.includes(String(d.index)));
+    if (!available) {
+      setCmStatus('All detected cameras already added.', '');
+      toast('All cameras already active.', 'info');
+      return;
+    }
+    // Add it
+    const payload = { source: String(available.index), camera_id: 'phone' };
+    const addRes = await fetch(`${BASE}/api/cameras/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!addRes.ok) {
+      const err = await addRes.json();
+      setCmStatus(`ERROR: ${err.detail}`, 'error');
+      toast(err.detail, 'danger');
+      return;
+    }
+    const result = await addRes.json();
+    setCmStatus(`PHONE CONNECTED → ${result.camera_id}`, 'ok');
+    toast(`📱 Phone camera connected as ${result.camera_id}`, 'ok');
+    await fetchCameras();
+  } catch(e) {
+    setCmStatus('CONNECTION FAILED', 'error');
+    toast('Connection failed – check server', 'danger');
+  } finally {
+    btn.disabled = false; btn.textContent = '📱 CONNECT PHONE (DroidCam)';
+  }
+}
+
+async function addCamera() {
+  const source = document.getElementById('cam-source-input').value.trim();
+  const name   = document.getElementById('cam-name-input').value.trim();
+  if (!source) { toast('Enter a source (e.g. 0 or rtsp://...)', 'danger'); return; }
+
+  setCmStatus('ADDING…', '');
+  try {
+    const res = await fetch(`${BASE}/api/cameras/add`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, camera_id: name }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setCmStatus(`ERROR: ${data.detail}`, 'error'); return; }
+    setCmStatus(`ADDED → ${data.camera_id}`, 'ok');
+    document.getElementById('cam-source-input').value = '';
+    document.getElementById('cam-name-input').value = '';
+    toast(`Camera ${data.camera_id} added`, 'ok');
+    await fetchCameras();
+  } catch(e) {
+    setCmStatus('ADD FAILED', 'error');
+  }
+}
+
+async function removeCamera(camId) {
+  if (!confirm(`Remove camera ${camId}?`)) return;
+  setCmStatus(`REMOVING ${camId}…`, '');
+  try {
+    const res = await fetch(`${BASE}/api/cameras/${camId}`, { method: 'DELETE' });
+    if (!res.ok) { const e = await res.json(); setCmStatus(e.detail, 'error'); return; }
+    setCmStatus(`${camId} REMOVED`, 'ok');
+    toast(`Camera ${camId} disconnected`, 'info');
+    await fetchCameras();
+  } catch(e) {
+    setCmStatus('REMOVE FAILED', 'error');
+  }
+}
+
+function updateCamManagerList(cameras) {
+  const list = document.getElementById('cm-cam-list');
+  if (!cameras.length) { list.innerHTML = ''; return; }
+  list.innerHTML = cameras.map(c => {
+    const src = c.stats?.source || '?';
+    cameraSourceMap[c.camera_id] = src;
+    return `
+    <div class="cm-cam-item">
+      <span class="cm-cam-id">● ${c.camera_id}</span>
+      <span class="cm-cam-src">${src}</span>
+      <button class="cm-remove-btn" onclick="removeCamera('${c.camera_id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+/* ─── Boot ─── */
+(async () => {
+  document.getElementById('rec-indicator').style.display = 'none';
+  await fetchCameras();
+  poll(fetchCameras, POLL_MS);
+  poll(fetchAlerts, POLL_ALERTS_MS);
+})();
+</script>
+
+</body>
+</html>
